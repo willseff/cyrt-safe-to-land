@@ -1,0 +1,3 @@
+# Ignore GRIB files
+*.grib
+*.grib2
