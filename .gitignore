@@ -1,3 +1,5 @@
 # Ignore GRIB files
 *.grib
 *.grib2
+
+.venv
