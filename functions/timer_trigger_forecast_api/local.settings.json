@@ -1,0 +1,10 @@
+{
+  "Values": {
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+
+    "ADLS_ACCOUNT_URL": "https://cyrtdata.dfs.core.windows.net/",
+    "ADLS_FILESYSTEM": "weather",
+    "ADLS_DIR": "ecmwf/ifs/0p25"
+  }
+}
