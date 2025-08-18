@@ -25,7 +25,24 @@ class WeatherLanding2DNet(nn.Module):
         z = self.features(x)
         return self.head(z).squeeze(1)  # (B,)
 
+from azure.identity import DefaultAzureCredential
+from azure.storage.queue import QueueClient
 
+# From your setup
+ACCOUNT = "cyrtdata"                       # <--- storage account name
+QUEUE   = "forecast-data"                  # <--- your queue
+
+cred = DefaultAzureCredential()
+queue_url = f"https://{ACCOUNT}.queue.core.windows.net"
+
+qc = QueueClient(account_url=queue_url, queue_name=QUEUE, credential=cred)
+
+# Example: receive one message
+msgs = qc.receive_messages(messages_per_page=1, visibility_timeout=600)
+for m in msgs:
+    print("Got:", m.content)
+    qc.delete_message(m)
+    break
 
 # --- Azure ADLS download ---
 ADLS_CONNECTION_STRING = os.getenv("ADLS_CONNECTION_STRING", "<your_adls_connection_string>")
