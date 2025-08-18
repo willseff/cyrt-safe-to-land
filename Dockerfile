@@ -26,11 +26,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy deploy folder
 COPY deploy/ ./deploy/
 
-# Set environment variables for Azure credentials (override in deployment)
-ENV ADLS_CONNECTION_STRING=""
-ENV ADLS_CONTAINER=""
-ENV ADLS_BLOB_NAME="realtime_forecast.grib2"
-ENV AZURE_SQL_CONN_STR=""
-
 # Run inference script
 CMD ["python", "deploy/inference.py"]

@@ -5,6 +5,12 @@ import xarray as xr
 from azure.storage.blob import BlobServiceClient
 import pyodbc
 import os
+from azure.identity import DefaultAzureCredential
+from azure.storage.queue import QueueClient
+from azure.storage.filedatalake import DataLakeServiceClient
+import json
+import base64
+import tempfile
 
 class WeatherLanding2DNet(nn.Module):
     def __init__(self, in_ch, base=16):
@@ -24,9 +30,40 @@ class WeatherLanding2DNet(nn.Module):
     def forward(self, x):  # x: (B, C, H, W)
         z = self.features(x)
         return self.head(z).squeeze(1)  # (B,)
+    
+def download_adls_file_from_message(message: dict, local_path: str):
+    """
+    Downloads a file from ADLS using managed identity, given an event message dict.
+    The file is saved to local_path.
+    """
+    # Extract the ADLS file URL from the message
+    adls_url = message["data"]["url"]
+    # Parse storage account and file system from the URL
+    # Example: https://cyrtdata.dfs.core.windows.net/weather/ecmwf/ifs/0p25/ifs_20250817_t06z_s012_0p25.grib2
+    parts = adls_url.replace("https://", "").split(".dfs.core.windows.net/")
+    account_name = parts[0]
+    file_path = parts[1]
+    file_system = file_path.split("/")[0]
+    file_path_in_fs = "/".join(file_path.split("/")[1:])
 
-from azure.identity import DefaultAzureCredential
-from azure.storage.queue import QueueClient
+    # Authenticate using managed identity
+    credential = DefaultAzureCredential()
+    service_client = DataLakeServiceClient(
+        account_url=f"https://{account_name}.dfs.core.windows.net",
+        credential=credential
+    )
+    file_system_client = service_client.get_file_system_client(file_system)
+    file_client = file_system_client.get_file_client(file_path_in_fs)
+
+    # Download the file
+    with open(local_path, "wb") as f:
+        download = file_client.download_file()
+        f.write(download.readall())
+    print(f"Downloaded {adls_url} to {local_path}")
+
+# Example usage:
+# message = { ... }  # your event message dict
+# download_adls_file_from_message(message, "./downloaded_file.grib2")
 
 # From your setup
 ACCOUNT = "cyrtdata"                       # <--- storage account name
@@ -38,32 +75,32 @@ queue_url = f"https://{ACCOUNT}.queue.core.windows.net"
 qc = QueueClient(account_url=queue_url, queue_name=QUEUE, credential=cred)
 
 # Example: receive one message
-msgs = qc.receive_messages(messages_per_page=1, visibility_timeout=600)
+msgs = qc.receive_messages(messages_per_page=10, visibility_timeout=600)
 for m in msgs:
-    print("Got:", m.content)
-    qc.delete_message(m)
-    break
+    message = json.loads(m.content)
+    api_type = message.get("data", {}).get("api")
+    if api_type == "FlushWithClose":
+        file_url = message["data"]["url"]
+        print(f"File location: {file_url}")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            filename = os.path.basename(file_url)
+            local_path = os.path.join(temp_dir, filename)
+            download_adls_file_from_message(message, local_path)
+            print(f"Downloaded to: {local_path}")
+    else:
+        # Delete the message from the queue if not FlushWithClose
+        qc.delete_message(m)
 
-# --- Azure ADLS download ---
-ADLS_CONNECTION_STRING = os.getenv("ADLS_CONNECTION_STRING", "<your_adls_connection_string>")
-ADLS_CONTAINER = os.getenv("ADLS_CONTAINER", "<your_container>")
-ADLS_BLOB_NAME = os.getenv("ADLS_BLOB_NAME", "realtime_forecast.grib2")
-LOCAL_GRIB2_PATH = "realtime_forecast.grib2"
-
-blob_service_client = BlobServiceClient.from_connection_string(ADLS_CONNECTION_STRING)
-container_client = blob_service_client.get_container_client(ADLS_CONTAINER)
-with open(LOCAL_GRIB2_PATH, "wb") as f:
-    blob_data = container_client.download_blob(ADLS_BLOB_NAME)
-    f.write(blob_data.readall())
+    break  # Remove this break if you want to process all matching messages
 
 # --- Prepare ds_forecast for inference ---
 ds_forecast_t2m = xr.open_dataset(
-    LOCAL_GRIB2_PATH,
+    local_path,
     engine="cfgrib",
     filter_by_keys={"typeOfLevel": "heightAboveGround", "level": 2}
 )
 ds_forecast_other = xr.open_dataset(
-    LOCAL_GRIB2_PATH,
+    local_path,
     engine="cfgrib"
 )
 ds_forecast_t2m = ds_forecast_t2m.sel(
@@ -106,32 +143,3 @@ with torch.no_grad():
     logits = model(Xn_predict_tensor)
     probs = torch.sigmoid(logits).numpy()
 
-
-# --- Write output to Azure SQL ---
-AZURE_SQL_CONN_STR = os.getenv("AZURE_SQL_CONN_STR", "DRIVER={ODBC Driver 17 for SQL Server};SERVER=<your_server>;DATABASE=<your_db>;UID=<your_user>;PWD=<your_password>")
-
-try:
-    conn = pyodbc.connect(AZURE_SQL_CONN_STR)
-    cursor = conn.cursor()
-    # Example: create table if not exists
-    cursor.execute("""
-        IF OBJECT_ID('dbo.InferenceResults', 'U') IS NULL
-        CREATE TABLE dbo.InferenceResults (
-            id INT IDENTITY(1,1) PRIMARY KEY,
-            probability FLOAT,
-            timestamp DATETIME DEFAULT GETDATE()
-        )
-    """)
-    conn.commit()
-    # Insert probabilities
-    for prob in probs:
-        cursor.execute("INSERT INTO dbo.InferenceResults (probability) VALUES (?)", float(prob))
-    conn.commit()
-    print("Probabilities written to Azure SQL.")
-except Exception as e:
-    print(f"Azure SQL write failed: {e}")
-finally:
-    try:
-        conn.close()
-    except:
-        pass
