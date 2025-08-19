@@ -7,3 +7,6 @@
 # ignore all files in the .vscode directory
 .vscode/
 .DS_Store
+
+# ignore all .idx files
+*.idx
