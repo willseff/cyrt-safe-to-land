@@ -14,8 +14,15 @@ RUN apt-get update && \
         libpq-dev \
         libeccodes-dev \
         curl \
+        gpg \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
+
+RUN curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /usr/share/keyrings/ms.gpg \
+    && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ms.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list \
+    && apt-get update \
+    && ACCEPT_EULA=Y apt-get install -y msodbcsql18
+
 
 # Copy requirements first for better layer caching
 COPY deploy/requirements.txt ./requirements.txt

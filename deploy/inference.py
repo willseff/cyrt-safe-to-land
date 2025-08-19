@@ -89,7 +89,8 @@ def run_inference(local_path):
     ds_forecast_other = xr.open_dataset(
         local_path,
         engine="cfgrib",
-        backend_kwargs={'indexpath': ''}
+        backend_kwargs={'indexpath': ''},
+        drop_variables=['t2m']  # Drop t2m since we handle it separately
     )
     ds_forecast_t2m = ds_forecast_t2m.sel(
         latitude=slice(66, 59),
@@ -171,9 +172,27 @@ for m in msgs:
             new_row = {"file": filename, "probability": prob, "timestamp": extract_timestamp(file_url)}
             results_df = pd.concat([results_df, pd.DataFrame([new_row])], ignore_index=True)
     else:
-        # Delete the message from the queue if not FlushWithClose
-        qc.delete_message(m)
-        print('message deleted from queue')
+        print(f"Skipping message with unsupported API type: {api_type}")
+
+print("Results DataFrame:")
+print(results_df)
+
+
+# connect to sqldb
+connection_string = 'Driver={ODBC Driver 18 for SQL Server};Server=tcp:cyrt-server.database.windows.net,1433;Database=cyrt-db;Uid=PCSUSER;Pwd=welcome123!;Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;'
+
+conn = pyodbc.connect(connection_string)
+print("Connected to SQL database")
+cursor = conn.cursor()
+
+# Insert results into SQL database
+for index, row in results_df.iterrows():
+    cursor.execute(
+        "INSERT INTO dbo.forecast_results ([file], probability, [timestamp]) VALUES (?, ?, ?)",
+        row['file'], row['probability'], row['timestamp']
+    )
+conn.commit()
+print("Results inserted into SQL database")
 
 
 # # --- Prepare ds_forecast for inference ---
@@ -227,4 +246,3 @@ for m in msgs:
 #     probs = torch.sigmoid(logits).numpy()
 
 # print("Predicted probabilities:", probs)
-
