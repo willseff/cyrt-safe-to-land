@@ -149,7 +149,7 @@ queue_url = f"https://{ACCOUNT}.queue.core.windows.net"
 qc = QueueClient(account_url=queue_url, queue_name=QUEUE, credential=cred)
 
 # Example: receive one message
-msgs = qc.receive_messages(messages_per_page=10, visibility_timeout=600)
+msgs = qc.receive_messages(messages_per_page=32, visibility_timeout=600)
 for m in msgs:
     # Azure Storage Queue messages are base64-encoded by default
     try:
@@ -194,55 +194,6 @@ for index, row in results_df.iterrows():
 conn.commit()
 print("Results inserted into SQL database")
 
-
-# # --- Prepare ds_forecast for inference ---
-# ds_forecast_t2m = xr.open_dataset(
-#     local_path,
-#     engine="cfgrib",
-#     filter_by_keys={"typeOfLevel": "heightAboveGround", "level": 2}
-# )
-# ds_forecast_other = xr.open_dataset(
-#     local_path,
-#     engine="cfgrib"
-# )
-# ds_forecast_t2m = ds_forecast_t2m.sel(
-#     latitude=slice(66, 59),
-#     longitude=slice(-101, -82)
-# )
-# ds_forecast_other = ds_forecast_other.sel(
-#     latitude=slice(66, 59),
-#     longitude=slice(-101, -82)
-# )
-# t2m = ds_forecast_t2m['t2m'].values
-# u10 = ds_forecast_other['u10'].values
-# v10 = ds_forecast_other['v10'].values
-# msl = ds_forecast_other['msl'].values
-# X_predict = np.stack([t2m, u10, v10, msl], axis=1)
-# X_predict = np.expand_dims(X_predict, axis=0)
-# X_predict = np.transpose(X_predict, (0, 2, 1, 3))
-
-# # Load the bundle
-# bundle = torch.load("deploy/weather_landing_bundle.pth", weights_only=False)
-# mu = bundle["mu"]
-# sd = bundle["sd"]
-# variables = bundle["variables"]
-
-# # Now normalization will broadcast correctly
-# Xn_predict = (X_predict - mu) / sd
-
-# # Convert to PyTorch tensor
-# Xn_predict_tensor = torch.tensor(Xn_predict, dtype=torch.float32)
-
-# # Load model
-# in_ch = bundle["in_ch"]
-# base = bundle["base"]
-# model = WeatherLanding2DNet(in_ch=in_ch, base=base)
-# model.load_state_dict(bundle["state_dict"])
-# model.eval()
-
-# # Run inference
-# with torch.no_grad():
-#     logits = model(Xn_predict_tensor)
-#     probs = torch.sigmoid(logits).numpy()
-
-# print("Predicted probabilities:", probs)
+for m in msgs:
+    qc.delete_message(m)
+    print(f"Deleted message: {m.id}")
