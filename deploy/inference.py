@@ -179,7 +179,7 @@ print(results_df)
 
 
 # connect to sqldb
-connection_string = f'Driver={ODBC Driver 18 for SQL Server};Server=tcp:cyrt-server.database.windows.net,1433;Database=cyrt-db;Uid=PCSUSER;Pwd={os.environ["SQL_PASSWORD"]};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;'
+connection_string = f'Driver={ODBC Driver 18 for SQL Server};Server=tcp:cyrt-server.database.windows.net,1433;Database=cyrt-db;Uid=PCSUSER;Pwd={os.environ["sql-password"]};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;'
 
 conn = pyodbc.connect(connection_string)
 print("Connected to SQL database")
