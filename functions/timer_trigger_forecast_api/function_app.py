@@ -1,9 +1,7 @@
 import os
 import logging
-import datetime as dt
 import tempfile
 from pathlib import Path
-from math import floor
 from datetime import datetime, timezone
 
 import azure.functions as func
@@ -57,7 +55,6 @@ def timer_trigger_forecast_api(myTimer: func.TimerRequest) -> None:
 
     try:
         run_dt = client.latest(type="fc")  # e.g., 2025-08-17 12:00:00 UTC
-        run_dt = client.latest(type="fc")
         if run_dt.tzinfo is None:
             run_dt = run_dt.replace(tzinfo=timezone.utc)
         now = datetime.now(timezone.utc)
