@@ -5,6 +5,7 @@ import os
 import re
 import torch
 import pyodbc
+import struct
 import pandas as pd
 import numpy as np
 import xarray as xr
@@ -12,6 +13,7 @@ from torch import nn
 from azure.identity import DefaultAzureCredential
 from azure.storage.queue import QueueClient
 from azure.storage.filedatalake import DataLakeServiceClient
+from azure import identity
 
 class WeatherLanding2DNet(nn.Module):
     def __init__(self, in_ch, base=16):
@@ -185,18 +187,31 @@ for m in msgs:
 print("Results DataFrame:")
 print(results_df)
 
-# connect to sqldb
-connection_string = f'Driver={{ODBC Driver 18 for SQL Server}};Server=tcp:cyrt-server.database.windows.net,1433;Database=cyrt-db;Uid=PCSUSER;Pwd={os.environ["sql_password"]};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;'
+# connection string
+connection_string = os.environ["AZURE_SQL_CONNECTIONSTRING"]
 
-conn = pyodbc.connect(connection_string)
+def get_conn():
+    credential = identity.DefaultAzureCredential(exclude_interactive_browser_credential=False)
+    token_bytes = credential.get_token("https://database.windows.net/.default").token.encode("UTF-16-LE")
+    token_struct = struct.pack(f'<I{len(token_bytes)}s', len(token_bytes), token_bytes)
+    SQL_COPT_SS_ACCESS_TOKEN = 1256  # This connection option is defined by microsoft in msodbcsql.h
+    conn = pyodbc.connect(connection_string, attrs_before={SQL_COPT_SS_ACCESS_TOKEN: token_struct})
+    return conn
+
+# connect to sqldb
+conn = get_conn()
 print("Connected to SQL database")
+
 cursor = conn.cursor()
 
-# Insert results into SQL database
-for index, row in results_df.iterrows():
-    cursor.execute(
-        "INSERT INTO dbo.forecast_results ([file], probability, [timestamp]) VALUES (?, ?, ?)",
-        row['file'], row['probability'], row['timestamp']
-    )
-conn.commit()
-print("Results inserted into SQL database")
+if results_df.empty:
+    print("No results to insert into SQL database")
+else:
+    # Insert results into SQL database
+    for index, row in results_df.iterrows():
+        cursor.execute(
+            "INSERT INTO dbo.forecast_results ([file], probability, [timestamp]) VALUES (?, ?, ?)",
+            row['file'], row['probability'], row['timestamp']
+        )
+    conn.commit()
+    print("Results inserted into SQL database")
