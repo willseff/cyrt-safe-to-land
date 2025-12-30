@@ -1,0 +1,23 @@
+[project]
+name = "cyrt-safe-to-land"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "azure-functions>=1.24.0",
+    "azure-identity>=1.25.1",
+    "azure-storage-file-datalake>=12.22.0",
+    "azure-storage-queue>=12.14.1",
+    "ecmwf-opendata>=0.3.26",
+    "pandas>=2.3.3",
+    "pyodbc>=5.3.0",
+    "torch>=2.9.1",
+    "xarray>=2025.12.0",
+]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.1.0",
+    "ipynb>=0.5.1",
+]
