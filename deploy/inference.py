@@ -1,19 +1,19 @@
-import torch
-import numpy as np
-from torch import nn
-import xarray as xr
-from azure.storage.blob import BlobServiceClient
-import pyodbc
-import os
-from azure.identity import DefaultAzureCredential
-from azure.storage.queue import QueueClient
-from azure.storage.filedatalake import DataLakeServiceClient
 import json
 import base64
 import tempfile
-import pandas as pd
-from datetime import datetime
+import os
 import re
+import torch
+import pyodbc
+import struct
+import pandas as pd
+import numpy as np
+import xarray as xr
+from torch import nn
+from azure.identity import DefaultAzureCredential
+from azure.storage.queue import QueueClient
+from azure.storage.filedatalake import DataLakeServiceClient
+from azure import identity
 
 class WeatherLanding2DNet(nn.Module):
     def __init__(self, in_ch, base=16):
@@ -134,14 +134,12 @@ def run_inference(local_path):
 
     return probs[0]  # or whatever you want to append
 
-    # Example DataFrame to collect results
+# DataFrame to collect results
 results_df = pd.DataFrame(columns=["file", "probability", 'timestamp'])
 
-print(results_df)
-
 # From your setup
-ACCOUNT = "cyrtdata"                       # <--- storage account name
-QUEUE   = "forecast-data"                  # <--- your queue
+ACCOUNT = "cyrtdata"                       # storage account name
+QUEUE   = "forecast-data"                  # queue
 
 cred = DefaultAzureCredential()
 queue_url = f"https://{ACCOUNT}.queue.core.windows.net"
@@ -158,9 +156,13 @@ for m in msgs:
     except Exception as e:
         print(f"Failed to decode message: {e}")
         print(f"Raw message content: {repr(m.content)}")
+        # delete message if malformed
+        qc.delete_message(m)
+        print(f"Deleted message: {m.id}")
         continue
     
     api_type = message.get("data", {}).get("api")
+
     if api_type == "FlushWithClose":
         file_url = message["data"]["url"]
         print(f"File location: {file_url}")
@@ -171,29 +173,46 @@ for m in msgs:
             prob = run_inference(local_path)
             new_row = {"file": filename, "probability": prob, "timestamp": extract_timestamp(file_url)}
             results_df = pd.concat([results_df, pd.DataFrame([new_row])], ignore_index=True)
+            qc.delete_message(m)
+            print(f"Deleted message: {m.id}")
+    
     else:
         print(f"Skipping message with unsupported API type: {api_type}")
+        qc.delete_message(m)
+        print(f"Deleted message: {m.id}")
+
 
 print("Results DataFrame:")
 print(results_df)
 
+# connection string
+connection_string = os.environ["AZURE_SQL_CONNECTIONSTRING"]
+
+def get_conn():
+    credential = identity.DefaultAzureCredential(exclude_interactive_browser_credential=False)
+    token_bytes = credential.get_token("https://database.windows.net/.default").token.encode("UTF-16-LE")
+    token_struct = struct.pack(f'<I{len(token_bytes)}s', len(token_bytes), token_bytes)
+    SQL_COPT_SS_ACCESS_TOKEN = 1256  # This connection option is defined by microsoft in msodbcsql.h
+    conn = pyodbc.connect(connection_string, attrs_before={SQL_COPT_SS_ACCESS_TOKEN: token_struct})
+    return conn
 
 # connect to sqldb
-connection_string = f'Driver={ODBC Driver 18 for SQL Server};Server=tcp:cyrt-server.database.windows.net,1433;Database=cyrt-db;Uid=PCSUSER;Pwd={os.environ["sql-password"]};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;'
-
-conn = pyodbc.connect(connection_string)
+conn = get_conn()
 print("Connected to SQL database")
+
 cursor = conn.cursor()
 
-# Insert results into SQL database
-for index, row in results_df.iterrows():
-    cursor.execute(
-        "INSERT INTO dbo.forecast_results ([file], probability, [timestamp]) VALUES (?, ?, ?)",
-        row['file'], row['probability'], row['timestamp']
-    )
-conn.commit()
-print("Results inserted into SQL database")
+if results_df.empty:
+    raise RuntimeError("No forecast results available to insert into database")
 
-for m in msgs:
-    qc.delete_message(m)
-    print(f"Deleted message: {m.id}")
+else:
+    # Insert results into SQL database
+    for index, row in results_df.iterrows():
+        cursor.execute(
+            "INSERT INTO dbo.forecast_results ([file], probability, [timestamp]) VALUES (?, ?, ?)",
+            row['file'], row['probability'], row['timestamp']
+        )
+    conn.commit()
+    print("Results inserted into SQL database")
+
+# %%
