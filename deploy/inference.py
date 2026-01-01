@@ -134,10 +134,8 @@ def run_inference(local_path):
 
     return probs[0]  # or whatever you want to append
 
-    # Example DataFrame to collect results
+# DataFrame to collect results
 results_df = pd.DataFrame(columns=["file", "probability", 'timestamp'])
-
-print(results_df)
 
 # From your setup
 ACCOUNT = "cyrtdata"                       # storage account name
@@ -205,7 +203,8 @@ print("Connected to SQL database")
 cursor = conn.cursor()
 
 if results_df.empty:
-    print("No results to insert into SQL database")
+    raise RuntimeError("No forecast results available to insert into database")
+
 else:
     # Insert results into SQL database
     for index, row in results_df.iterrows():
@@ -215,3 +214,5 @@ else:
         )
     conn.commit()
     print("Results inserted into SQL database")
+
+# %%
