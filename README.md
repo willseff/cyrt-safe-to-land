@@ -21,6 +21,70 @@ Predictions were generated using a 2D convolutional neural network with four inp
 
 The model was trained on hourly data from 2022, validated on 2023 data, and tested on 2024 data. It achieved an AUC of 0.87 on the test set.
 
+## Architecture
+
+### Data Sources
+| ECMWF API | METAR-TAF.com |
+|:---------:|:-------------:|
+| <img src="assets/ecmwfr.png" width="80"/> | <img src="assets/metar-taf.png" width="80"/> |
+
+### Azure Cloud Architecture
+| Azure Functions | Azure Data Lake Storage | Container App Jobs | Azure SQL |
+|:---------------:|:-----------------------:|:------------------:|:---------:|
+| <img src="assets/azure_functions.webp" width="80"/> | <img src="assets/adls.webp" width="80"/> | <img src="assets/containerappjobs.png" width="80"/> | <img src="assets/azure_sql.png" width="80"/> |
+| Hourly Trigger | Raw Data Storage | Model Inference | Predictions Storage |
+
+### Model Development
+| PyTorch |
+|:-------:|
+| <img src="assets/pytorch.png" width="80"/> |
+
+### Visualization
+| Looker Dashboard |
+|:----------------:|
+| <img src="assets/looker.png" width="80"/> |
+
+### Data Flow
+```mermaid
+flowchart TB
+ subgraph Sources["External Data Sources"]
+    direction LR
+        ECMWF["ECMWF API"]
+        METAR["METAR-TAF.com"]
+  end
+ subgraph Training["Model Development"]
+        PyTorch["PyTorch Training"]
+  end
+ subgraph Azure["Azure Cloud"]
+        Func["Azure Function App<br>(Hourly Trigger)"]
+        ADLS[("Azure Data Lake Storage")]
+        ACA["Azure Container App Job<br>(Inference)"]
+        SQL[("Azure SQL Database")]
+  end
+ subgraph Output["Visualization"]
+        Looker["Looker Dashboard"]
+  end
+    ECMWF -- Fetch Data --> Func
+    METAR -- Fetch Data --> Func
+    Func -- Ingest Raw Data --> ADLS
+    PyTorch -. Deploy Model Artifact .-> ACA
+    ADLS -- Read Batch Data --> ACA
+    ACA -- Store Predictions --> SQL
+    SQL -- Query Results --> Looker
+
+     ECMWF:::external
+     METAR:::external
+     PyTorch:::process
+     Func:::process
+     ADLS:::storage
+     ACA:::process
+     SQL:::storage
+     Looker:::external
+    classDef storage fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef process fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef external fill:#fff3e0,stroke:#e65100,stroke-width:2px
+```
+
 ![cyrt-safe-to-land](https://github.com/user-attachments/assets/98e0a847-ffa6-4213-a29e-cbe8cab5abf4)
 
 To deploy use command: docker buildx build --platform linux/amd64 -t willseff/cyrt-inference:1.4 --push .
