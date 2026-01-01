@@ -34,15 +34,10 @@ The model was trained on hourly data from 2022, validated on 2023 data, and test
 | <img src="assets/azure_functions.webp" width="80"/> | <img src="assets/adls.webp" width="80"/> | <img src="assets/containerappjobs.png" width="80"/> | <img src="assets/azure_sql.png" width="80"/> |
 | Hourly Trigger | Raw Data Storage | Model Inference | Predictions Storage |
 
-### Model Development
-| PyTorch |
-|:-------:|
-| <img src="assets/pytorch.png" width="80"/> |
-
-### Visualization
-| Looker Dashboard |
-|:----------------:|
-| <img src="assets/looker.png" width="80"/> |
+### Model Development & Visualization
+| PyTorch | Looker Dashboard |
+|:-------:|:----------------:|
+| <img src="assets/pytorch.png" width="80"/> | <img src="assets/looker.png" width="80"/> |
 
 ### Data Flow
 ```mermaid
