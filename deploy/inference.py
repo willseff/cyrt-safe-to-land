@@ -163,24 +163,23 @@ for m in msgs:
     
     api_type = message.get("data", {}).get("api")
 
-    if api_type == "FlushWithClose":
-        file_url = message["data"]["url"]
-        print(f"File location: {file_url}")
-        with tempfile.TemporaryDirectory() as temp_dir:
-            filename = os.path.basename(file_url)
-            local_path = os.path.join(temp_dir, filename)
-            download_adls_file_from_message(message, local_path)
-            prob = run_inference(local_path)
-            new_row = {"file": filename, "probability": prob, "timestamp": extract_timestamp(file_url)}
-            results_df = pd.concat([results_df, pd.DataFrame([new_row])], ignore_index=True)
-            qc.delete_message(m)
-            print(f"Deleted message: {m.id}")
-    
-    else:
+    if api_type != "FlushWithClose":
         print(f"Skipping message with unsupported API type: {api_type}")
         qc.delete_message(m)
         print(f"Deleted message: {m.id}")
+        continue
 
+    file_url = message["data"]["url"]
+    print(f"File location: {file_url}")
+    with tempfile.TemporaryDirectory() as temp_dir:
+        filename = os.path.basename(file_url)
+        local_path = os.path.join(temp_dir, filename)
+        download_adls_file_from_message(message, local_path)
+        prob = run_inference(local_path)
+        new_row = {"file": filename, "probability": prob, "timestamp": extract_timestamp(file_url)}
+        results_df = pd.concat([results_df, pd.DataFrame([new_row])], ignore_index=True)
+        qc.delete_message(m)
+        print(f"Deleted message: {m.id}")
 
 print("Results DataFrame:")
 print(results_df)
@@ -215,4 +214,3 @@ else:
     conn.commit()
     print("Results inserted into SQL database")
 
-# %%
