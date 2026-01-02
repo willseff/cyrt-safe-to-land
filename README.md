@@ -1,7 +1,7 @@
 <!-- Repo stats -->
-![Repo Size](https://img.shields.io/github/repo-size/ai-cfia/nachet)
-![Languages](https://img.shields.io/github/languages/count/ai-cfia/nachet)
-![Top Language](https://img.shields.io/github/languages/top/ai-cfia/nachet)
+![Repo Size](https://img.shields.io/github/repo-size/willseff/cyrt-safe-to-land)
+![Languages](https://img.shields.io/github/languages/count/willseff/cyrt-safe-to-land)
+![Top Language](https://img.shields.io/github/languages/top/willseff/cyrt-safe-to-land)
 
 ## Introduction
 
