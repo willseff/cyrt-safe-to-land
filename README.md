@@ -7,10 +7,10 @@ The model aims to predict if the landing conditions at Rankin Inlet will be favo
 ## The Data
 The European Centre for Medium-Range Weather Forecasts (ECMWF) provides historical gridded 2D weather data in GRIB format, with each grid cell representing a point estimate of weather conditions. For this project, I used: 
 
- t2m → 2 metre temperature 
- u10 → 10 metre U-component of wind 
- v10 → 10 metre V-component of wind 
- msl → Mean sea level pressure 
+ t2m → 2 metre temperature  
+ u10 → 10 metre U-component of wind  
+ v10 → 10 metre V-component of wind  
+ msl → Mean sea level pressure  
 
  ECMWF also provides current weather conditions, which I used to generate real-time predictions. 
 
