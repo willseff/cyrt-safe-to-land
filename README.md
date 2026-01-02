@@ -1,3 +1,8 @@
+<!-- Repo stats -->
+![Repo Size](https://img.shields.io/github/repo-size/ai-cfia/nachet)
+![Languages](https://img.shields.io/github/languages/count/ai-cfia/nachet)
+![Top Language](https://img.shields.io/github/languages/top/ai-cfia/nachet)
+
 ## Introduction
 
 Landing conditions at Rankin Inlet (CYRT) are often unpredictable especially in the winter. When I wa working at Meliadine Gold Mine 25km away from Rankin Inlet we would be flown from Montreal to Rankin Inlet. Flights will be often delayed or postponed due to weather conditions. I had the idea to create a model to better predict if there would be safe landing conditions for when the plane arrived so less flights will need to be delayed or postponed. 
