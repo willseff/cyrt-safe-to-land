@@ -15,35 +15,44 @@ from azure.storage.queue import QueueClient
 from azure.storage.filedatalake import DataLakeServiceClient
 from azure import identity
 
+
 class WeatherLanding2DNet(nn.Module):
     def __init__(self, in_ch, base=16):
         super().__init__()
         self.features = nn.Sequential(
-            nn.Conv2d(in_ch, base, 3, padding=1), nn.ReLU(),
-            nn.Conv2d(base, base, 3, padding=1), nn.ReLU(),
+            nn.Conv2d(in_ch, base, 3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(base, base, 3, padding=1),
+            nn.ReLU(),
             nn.MaxPool2d(2),
-            nn.Conv2d(base, base*2, 3, padding=1), nn.ReLU(),
-            nn.Conv2d(base*2, base*2, 3, padding=1), nn.ReLU(),
+            nn.Conv2d(base, base * 2, 3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(base * 2, base * 2, 3, padding=1),
+            nn.ReLU(),
             nn.MaxPool2d(2),
         )
         self.head = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1), nn.Flatten(),
-            nn.Linear(base*2, 1)  # logit
+            nn.AdaptiveAvgPool2d(1),
+            nn.Flatten(),
+            nn.Linear(base * 2, 1),  # logit
         )
+
     def forward(self, x):  # x: (B, C, H, W)
         z = self.features(x)
         return self.head(z).squeeze(1)  # (B,)
-    
+
+
 def extract_timestamp(file_url):
     # Extract the filename from the URL
     filename = os.path.basename(file_url)
     # Find the last 12 digits before '.grib2'
-    match = re.search(r'(\d{12})\.grib2$', filename)
+    match = re.search(r"(\d{12})\.grib2$", filename)
     if match:
         return match.group(1)
     else:
         return None
-    
+
+
 def download_adls_file_from_message(message: dict, local_path: str):
     """
     Downloads a file from ADLS using managed identity, given an event message dict.
@@ -63,7 +72,7 @@ def download_adls_file_from_message(message: dict, local_path: str):
     credential = DefaultAzureCredential()
     service_client = DataLakeServiceClient(
         account_url=f"https://{account_name}.dfs.core.windows.net",
-        credential=credential
+        credential=credential,
     )
     file_system_client = service_client.get_file_system_client(file_system)
     file_client = file_system_client.get_file_client(file_path_in_fs)
@@ -74,9 +83,11 @@ def download_adls_file_from_message(message: dict, local_path: str):
         f.write(download.readall())
     print(f"Downloaded {adls_url} to {local_path}")
 
+
 # Example usage:
 # message = { ... }  # your event message dict
 # download_adls_file_from_message(message, "./downloaded_file.grib2")
+
 
 def run_inference(local_path):
     # --- Prepare ds_forecast for inference ---
@@ -84,26 +95,24 @@ def run_inference(local_path):
         local_path,
         engine="cfgrib",
         filter_by_keys={"typeOfLevel": "heightAboveGround", "level": 2},
-        backend_kwargs={'indexpath': ''}
+        backend_kwargs={"indexpath": ""},
     )
     ds_forecast_other = xr.open_dataset(
         local_path,
         engine="cfgrib",
-        backend_kwargs={'indexpath': ''},
-        drop_variables=['t2m']  # Drop t2m since we handle it separately
+        backend_kwargs={"indexpath": ""},
+        drop_variables=["t2m"],  # Drop t2m since we handle it separately
     )
     ds_forecast_t2m = ds_forecast_t2m.sel(
-        latitude=slice(66, 59),
-        longitude=slice(-101, -82)
+        latitude=slice(66, 59), longitude=slice(-101, -82)
     )
     ds_forecast_other = ds_forecast_other.sel(
-        latitude=slice(66, 59),
-        longitude=slice(-101, -82)
+        latitude=slice(66, 59), longitude=slice(-101, -82)
     )
-    t2m = ds_forecast_t2m['t2m'].values
-    u10 = ds_forecast_other['u10'].values
-    v10 = ds_forecast_other['v10'].values
-    msl = ds_forecast_other['msl'].values
+    t2m = ds_forecast_t2m["t2m"].values
+    u10 = ds_forecast_other["u10"].values
+    v10 = ds_forecast_other["v10"].values
+    msl = ds_forecast_other["msl"].values
     X_predict = np.stack([t2m, u10, v10, msl], axis=1)
     X_predict = np.expand_dims(X_predict, axis=0)
     X_predict = np.transpose(X_predict, (0, 2, 1, 3))
@@ -134,12 +143,13 @@ def run_inference(local_path):
 
     return probs[0]  # or whatever you want to append
 
+
 # DataFrame to collect results
-results_df = pd.DataFrame(columns=["file", "probability", 'timestamp'])
+results_df = pd.DataFrame(columns=["file", "probability", "timestamp"])
 
 # From your setup
-ACCOUNT = "cyrtdata"                       # storage account name
-QUEUE   = "forecast-data"                  # queue
+ACCOUNT = "cyrtdata"  # storage account name
+QUEUE = "forecast-data"  # queue
 
 cred = DefaultAzureCredential()
 queue_url = f"https://{ACCOUNT}.queue.core.windows.net"
@@ -151,7 +161,7 @@ msgs = qc.receive_messages(messages_per_page=32, visibility_timeout=600)
 for m in msgs:
     # Azure Storage Queue messages are base64-encoded by default
     try:
-        decoded_content = base64.b64decode(m.content).decode('utf-8')
+        decoded_content = base64.b64decode(m.content).decode("utf-8")
         message = json.loads(decoded_content)
     except Exception as e:
         print(f"Failed to decode message: {e}")
@@ -160,7 +170,7 @@ for m in msgs:
         qc.delete_message(m)
         print(f"Deleted message: {m.id}")
         continue
-    
+
     api_type = message.get("data", {}).get("api")
 
     if api_type != "FlushWithClose":
@@ -176,7 +186,11 @@ for m in msgs:
         local_path = os.path.join(temp_dir, filename)
         download_adls_file_from_message(message, local_path)
         prob = run_inference(local_path)
-        new_row = {"file": filename, "probability": prob, "timestamp": extract_timestamp(file_url)}
+        new_row = {
+            "file": filename,
+            "probability": prob,
+            "timestamp": extract_timestamp(file_url),
+        }
         results_df = pd.concat([results_df, pd.DataFrame([new_row])], ignore_index=True)
         qc.delete_message(m)
         print(f"Deleted message: {m.id}")
@@ -187,13 +201,23 @@ print(results_df)
 # connection string
 connection_string = os.environ["AZURE_SQL_CONNECTIONSTRING"]
 
+
 def get_conn():
-    credential = identity.DefaultAzureCredential(exclude_interactive_browser_credential=False)
-    token_bytes = credential.get_token("https://database.windows.net/.default").token.encode("UTF-16-LE")
-    token_struct = struct.pack(f'<I{len(token_bytes)}s', len(token_bytes), token_bytes)
-    SQL_COPT_SS_ACCESS_TOKEN = 1256  # This connection option is defined by microsoft in msodbcsql.h
-    conn = pyodbc.connect(connection_string, attrs_before={SQL_COPT_SS_ACCESS_TOKEN: token_struct})
+    credential = identity.DefaultAzureCredential(
+        exclude_interactive_browser_credential=False
+    )
+    token_bytes = credential.get_token(
+        "https://database.windows.net/.default"
+    ).token.encode("UTF-16-LE")
+    token_struct = struct.pack(f"<I{len(token_bytes)}s", len(token_bytes), token_bytes)
+    SQL_COPT_SS_ACCESS_TOKEN = (
+        1256  # This connection option is defined by microsoft in msodbcsql.h
+    )
+    conn = pyodbc.connect(
+        connection_string, attrs_before={SQL_COPT_SS_ACCESS_TOKEN: token_struct}
+    )
     return conn
+
 
 # connect to sqldb
 conn = get_conn()
@@ -209,8 +233,9 @@ else:
     for index, row in results_df.iterrows():
         cursor.execute(
             "INSERT INTO dbo.forecast_results ([file], probability, [timestamp]) VALUES (?, ?, ?)",
-            row['file'], row['probability'], row['timestamp']
+            row["file"],
+            row["probability"],
+            row["timestamp"],
         )
     conn.commit()
     print("Results inserted into SQL database")
-
