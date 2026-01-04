@@ -10,3 +10,7 @@
 
 # ignore all .idx files
 *.idx
+.env
+
+# ignore csv files
+*.csv
