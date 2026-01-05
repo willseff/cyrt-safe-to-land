@@ -24,7 +24,7 @@ The European Centre for Medium-Range Weather Forecasts (ECMWF) provides historic
 ## The Model
 Predictions were generated using a 2D convolutional neural network with four input channels, each representing a different weather variable. 
 
-The model was trained on hourly data from 2022, validated on 2023 data, and tested on 2024 data. It achieved an AUC of 0.87 on the test set.
+The model was trained on hourly data from 2022, validated on 2023 data, and tested on 2024 data. On the test set it achieved an AUC of 0.87 and an AUPRC of 0.75 with the minority class representing 30%.
 
 ## Architecture
 
